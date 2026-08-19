@@ -1,0 +1,11 @@
+python-telegram-bot[job-queue]>=21.6
+requests>=2.31
+PyYAML>=6.0
+pytz>=2024.1
+ruamel.yaml>=0.18
+openpyxl>=3.1
+
+# --- автоматический подсчёт людей (можно не ставить, если counting.enabled: false) ---
+ultralytics>=8.2
+opencv-python>=4.9
+numpy

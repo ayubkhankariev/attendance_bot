@@ -1,0 +1,39 @@
+{
+  "permissions": {
+    "allow": [
+      "PowerShell(python --version)",
+      "PowerShell(py --version 2>$null)",
+      "PowerShell(python3 --version 2>$null)",
+      "PowerShell(py -0p 2>$null)",
+      "PowerShell(python -m pip --version)",
+      "PowerShell(python -m pip install -r requirements.txt 2>&1 | Tee-Object -FilePath \"$env:TEMP\\\\claude\\\\pip_install.log\")",
+      "PowerShell(python -c \"import torch, ultralytics, cv2, telegram, yaml, pytz, requests; print\\('torch', torch.__version__\\); print\\('ultralytics', ultralytics.__version__\\); print\\('cv2', cv2.__version__\\); print\\('telegram OK'\\)\")",
+      "PowerShell(python -m monitor.main --print-timetable)",
+      "PowerShell(chcp 65001 | Out-Null; $env:PYTHONUTF8=1; python -m monitor.main --print-timetable)",
+      "PowerShell(setx PYTHONUTF8 1)",
+      "PowerShell(python -m monitor.main --test-camera \"LAB 407\")",
+      "PowerShell(python -m monitor.main 2>&1 | Tee-Object -FilePath \"$env:TEMP\\\\claude\\\\bot_run.log\")",
+      "PowerShell(python -m monitor.main 2>&1 | Tee-Object -FilePath \"$env:TEMP\\\\claude\\\\bot_run2.log\")",
+      "PowerShell(python -m monitor.main 2>&1 | Tee-Object -FilePath \"$env:TEMP\\\\claude\\\\bot_run3.log\")",
+      "PowerShell(Get-Process | Where-Object { $_.ProcessName -match 'iVMS|Zoom|Teams|Skype|obs|CameraApp|WindowsCamera' } | Select-Object ProcessName, Id)",
+      "PowerShell(python -m monitor.main --test-camera \"LAB 406\")",
+      "PowerShell(Get-Process python -ErrorAction SilentlyContinue)",
+      "PowerShell(python -m monitor.main 2>&1 | Tee-Object -FilePath \"$env:TEMP\\\\claude\\\\bot_run5.log\")",
+      "PowerShell(python -m monitor.main 2>&1 | Tee-Object -FilePath \"$env:TEMP\\\\claude\\\\bot_run6.log\")",
+      "PowerShell(python -m monitor.main 2>&1 | Tee-Object -FilePath \"$env:TEMP\\\\claude\\\\bot_run8.log\")",
+      "PowerShell(python -c \"import monitor.main; print\\('OK, handlers:', len\\(monitor.main.BOT_COMMANDS\\)\\)\")",
+      "PowerShell(python -c \"import monitor.main as m; print\\('OK'\\); print\\(sorted\\(m.MENU_ROWS.keys\\(\\)\\)\\)\")",
+      "PowerShell(python -c \"import monitor.main; print\\('OK'\\)\")",
+      "PowerShell(python -c \"import ruamel.yaml; print\\('ruamel available:', ruamel.yaml.__file__\\)\" 2>&1)",
+      "PowerShell(python -m pip install ruamel.yaml)",
+      "PowerShell(python -c \"from monitor import i18n; print\\(i18n.t\\('en','btn_schedule'\\)\\); print\\(i18n.t\\('uz','msg_bot_uptime', h=1, m=2\\)\\); print\\(len\\(i18n.TEXT['ru']\\), len\\(i18n.TEXT['en']\\), len\\(i18n.TEXT['uz']\\)\\)\")",
+      "PowerShell(Remove-Item \"$env:TEMP\\\\claude\\\\config_test.yaml\" -Force)",
+      "PowerShell(python -c \"import monitor.main as m; print\\('OK'\\); print\\('states:', sorted\\(set\\(m.STATE_PARENT\\)|{'main'}\\)\\); print\\('rooms states:', sorted\\(m.ROOMS_BY_STATE\\)\\)\")",
+      "PowerShell(python -c \"import openpyxl; print\\(openpyxl.__version__\\)\")",
+      "PowerShell(Get-CimInstance Win32_Process -Filter \"Name = 'python.exe'\")",
+      "PowerShell(Stop-Process -Id 22564,23896 -Force -ErrorAction SilentlyContinue)",
+      "PowerShell(Start-Sleep -Seconds 6; Get-Content \"$env:TEMP\\\\claude\\\\bot_run_penalties.log\" -Tail 40)",
+      "PowerShell(Start-Sleep -Seconds 6; Get-Content \"$env:TEMP\\\\claude\\\\bot_run_fix_send.log\" -Tail 15)"
+    ]
+  }
+}

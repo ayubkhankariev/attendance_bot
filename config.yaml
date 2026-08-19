@@ -1,0 +1,188 @@
+telegram:
+  bot_token: "8996503912:AAFIeqwV3NEfNmBBeBhFwXl5NIUeVLqkdfc"
+  target_chat_id: -1003663706685
+  review_chat_id: [348804943]
+  admin_chat_ids: [471758062, 1124919209, 8955379386, 348804943, 56800870]
+  mode: review
+
+timezone: "Asia/Tashkent"
+
+working_days: [0, 1, 2, 3, 4, 5]
+
+edupage:
+  school: "ttpu"
+
+periods:
+  1: "09:00"
+  2: "10:30"
+  3: "12:00"
+  4: "14:20"
+  5: "15:50"
+  6: "17:20"
+  7: "18:50"
+  8: "20:20"
+
+check_offset_minutes: 10
+
+presence_check_minutes: 5
+
+day_plan_time: "08:30"
+
+rules:
+  min_students: 10
+  low_hashtag: "#TALABALARSONI"
+  empty_hashtag: "#DARSBARBOD"
+  assume_teacher_in_count: true
+
+counting:
+  enabled: true
+  model: "yolov8m.pt"
+  confidence: 0.35
+
+# ------------------------------------------------------------
+# КАМЕРЫ: аудитория -> адрес снимка
+# Ключ = название аудитории ТОЧНО как в расписании EduPage (LAB 406, 203, 201 ...)
+#
+# Вариант 1 (камера напрямую, Hikvision):
+#   http://IP_КАМЕРЫ/ISAPI/Streaming/channels/101/picture
+# Вариант 2 (через регистратор NVR, канал N):
+#   http://IP_РЕГИСТРАТОРА/ISAPI/Streaming/channels/N01/picture   (канал 4 -> 401)
+# Вариант 3 (если ISAPI не работает — RTSP-поток):
+#   rtsp://логин:пароль@IP:554/Streaming/Channels/101
+#
+# IP камер/регистраторов смотрите в iVMS-4200: Device Management -> Device
+# ------------------------------------------------------------
+cameras:
+  "LAB 401":
+    url: "http://10.10.12.160/ISAPI/Streaming/channels/101/picture"
+    username: "admin"
+    password: "qwerty@12"
+  "LAB 403":
+    url: "http://10.10.12.162/ISAPI/Streaming/channels/101/picture"
+    username: "admin"
+    password: "qwerty@12"
+  "LAB 404":
+    url: "http://10.10.12.161/ISAPI/Streaming/channels/101/picture"
+    username: "admin"
+    password: "qwerty@12"
+  "LAB 405":
+    url: "http://10.10.12.166/ISAPI/Streaming/channels/101/picture"
+    username: "admin"
+    password: "qwerty@12"
+  "404AB":
+    url: "http://10.10.12.163/ISAPI/Streaming/channels/101/picture"
+    username: "admin"
+    password: "qwerty@12"
+  "402AB":
+    url: "http://10.10.12.167/ISAPI/Streaming/channels/101/picture"
+    username: "admin"
+    password: "qwerty@12"
+  "403AB":
+    url: "http://10.10.12.168/ISAPI/Streaming/channels/101/picture"
+    username: "admin"
+    password: "qwerty@12"
+  "303":
+    url: "http://10.10.12.169/ISAPI/Streaming/channels/101/picture"
+    username: "admin"
+    password: "qwerty@12"
+  "305":
+    url: "http://10.10.12.171/ISAPI/Streaming/channels/101/picture"
+    username: "admin"
+    password: "qwerty@12"
+  "306":
+    url: "http://10.10.12.172/ISAPI/Streaming/channels/101/picture"
+    username: "admin"
+    password: "qwerty@12"
+  "304":
+    url: "http://10.10.12.176/ISAPI/Streaming/channels/101/picture"
+    username: "admin"
+    password: "qwerty@12"
+  "305AB":
+    url: "http://10.10.12.175/ISAPI/Streaming/channels/101/picture"
+    username: "admin"
+    password: "qwerty@12"
+  "301":
+    url: "http://10.10.12.170/ISAPI/Streaming/channels/101/picture"
+    username: "admin"
+    password: "qwerty@12"
+  "204":
+    url: "http://10.10.12.180/ISAPI/Streaming/channels/101/picture"
+    username: "admin"
+    password: "qwerty@12"
+  "105":
+    url: "http://10.10.12.184/ISAPI/Streaming/channels/101/picture"
+    username: "admin"
+    password: "qwerty@12"
+  "107":
+    url: "http://10.10.12.185/ISAPI/Streaming/channels/101/picture"
+    username: "admin"
+    password: "qwerty@12"
+  "206":
+    url: "http://10.10.12.178/ISAPI/Streaming/channels/101/picture"
+    username: "admin"
+    password: "qwerty@12"
+  "303AB":
+    url: "http://10.10.12.174/ISAPI/Streaming/channels/101/picture"
+    username: "admin"
+    password: "qwerty@12"
+  "205":
+    url: "http://10.10.12.179/ISAPI/Streaming/channels/101/picture"
+    username: "admin"
+    password: "qwerty@12"
+  "201":
+    url: "http://10.10.12.182/ISAPI/Streaming/channels/101/picture"
+    username: "admin"
+    password: "qwerty@12"
+  "203":
+    url: "http://10.10.12.181/ISAPI/Streaming/channels/101/picture"
+    username: "admin"
+    password: "qwerty@12"
+  "307":
+    url: "http://10.10.12.173/ISAPI/Streaming/channels/101/picture"
+    username: "admin"
+    password: "qwerty@12"
+  "207":
+    url: "http://10.10.12.177/ISAPI/Streaming/channels/101/picture"
+    username: "admin"
+    password: "qwerty@12"
+  "302AB":
+    url: "http://10.10.12.189/ISAPI/Streaming/channels/101/picture"
+    username: "admin"
+    password: "qwerty@12"
+  "GREEN HALL":
+    url: "http://10.10.12.187/ISAPI/Streaming/channels/101/picture"
+    username: "admin"
+    password: "qwerty@12"
+  "BLUE HALL":
+    url: "http://10.10.12.209/ISAPI/Streaming/channels/101/picture"
+    username: "admin"
+    password: "qwerty@12"
+  "101 CHEM LAB":
+    url: "http://10.10.12.211/ISAPI/Streaming/channels/101/picture"
+    username: "admin"
+    password: "qwerty@12"
+  "LAB 406":
+    url: "http://10.10.12.164/ISAPI/Streaming/channels/101/picture"
+    username: "admin"
+    password: "qwerty@12"
+  "LAB 407":
+    url: "http://10.10.12.165/ISAPI/Streaming/channels/101/picture"
+    username: "admin"
+    password: "qwerty@12"
+
+# Если название в расписании отличается от ключа камеры — задайте синонимы
+room_aliases:
+  "LAB406": "LAB 406"
+  "LAB403": "LAB 403"
+
+# Сколько студентов ЧИСЛИТСЯ в каждой группе (для записи вида 5/58).
+# Если группа не указана — бот напишет 5/?
+group_sizes:
+  IT1-24: 29
+  IT2-24: 29
+  AE1-24: 25
+  AE2-24: 25
+  CIE-24: 30
+  IT1-23: 28
+  IT2-23: 28
+  SE-23: 27
