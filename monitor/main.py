@@ -23,7 +23,8 @@ from collections import Counter
 
 from . import i18n
 from . import penalties
-from .config import Config, norm_room, update_admin_chat_ids, update_camera_config
+from .config import (Config, norm_room, update_admin_chat_ids,
+                     update_allowed_group_ids, update_camera_config)
 from .timetable import EdupageTimetable, EdupageError
 from .camera import grab_snapshot, CameraError
 
@@ -102,7 +103,8 @@ def admin_only(handler):
         cfg: Config = context.application.bot_data["cfg"]
         chat_id = update.effective_chat.id
         # Если список администраторов не пуст, проверяем доступ
-        if cfg.admin_chat_ids and chat_id not in cfg.admin_chat_ids and not _is_master_admin(chat_id):
+        allowed = cfg.admin_chat_ids | cfg.allowed_group_ids
+        if allowed and chat_id not in allowed and not _is_master_admin(chat_id):
             lang = get_lang(context.application, chat_id)
             await update.effective_message.reply_text(
                 i18n.t(lang, "msg_access_denied", chat_id=chat_id)
@@ -870,8 +872,10 @@ STATE_ITEMS: dict[str, list[tuple[str, str]]] = {
     "teachers": [("teacher_search", "action"), ("teacher_list", "state")],
     "penalties": [("penalty_period", "action"), ("penalty_add", "action"), ("penalty_delete", "action"), ("manage_posts", "action")],
     "settings": [("lang", "state"), ("camera_settings", "state"),
-                  ("admin_ids", "state"), ("health_check", "action")],
+                  ("admin_ids", "state"), ("group_ids", "state"),
+                  ("health_check", "action")],
     "admin_ids": [("admin_add", "action"), ("admin_remove", "action")],
+    "group_ids": [("group_add", "action"), ("group_remove", "action")],
 }
 
 STATE_PARENT: dict[str, str] = {
@@ -884,7 +888,8 @@ STATE_PARENT: dict[str, str] = {
     "floor_c4": "building_c", "floor_c3": "building_c",
     "floor_c2": "building_c", "floor_c1": "building_c",
     "teacher_list": "teachers", "lang": "settings",
-    "camera_settings": "settings", "admin_ids": "settings", "report": "schedule",
+    "camera_settings": "settings", "admin_ids": "settings", "group_ids": "settings",
+    "report": "schedule",
 }
 
 BUILDING_TITLE_ID = {  # для заголовка "{здание} — выберите..."
@@ -910,7 +915,7 @@ def _resolve_menu_id(cur: str, lang: str, text: str, chat_id: int | None = None)
     """Ищет нажатую кнопку среди пунктов ТЕКУЩЕГО состояния меню (state-scoped) —
     так одинаковые подписи в разных разделах (например "4 этаж" для A и C) не путаются."""
     for id_, _kind in STATE_ITEMS.get(cur, []):
-        if id_ == "admin_ids" and not _is_master_admin(chat_id or 0):
+        if id_ in ("admin_ids", "group_ids") and not _is_master_admin(chat_id or 0):
             continue
         if _btn_label(id_, lang) == text:
             return id_
@@ -947,7 +952,7 @@ def _kb_rows(state: str, lang: str, chat_id: int | None = None) -> list[list[str
         return rows
     items = STATE_ITEMS[state]
     if state == "settings" and not _is_master_admin(chat_id or 0):
-        items = [(id_, kind) for id_, kind in items if id_ != "admin_ids"]
+        items = [(id_, kind) for id_, kind in items if id_ not in ("admin_ids", "group_ids")]
     labels = [_btn_label(id_, lang) for id_, _ in items]
     rows = [labels[i:i + 2] for i in range(0, len(labels), 2)]
     if state != "main":
@@ -967,6 +972,12 @@ async def _goto(app, chat_id, state: str) -> None:
         admin_ids = sorted(app.bot_data["cfg"].admin_chat_ids)
         ids_text = ", ".join(str(admin_id) for admin_id in admin_ids) or "—"
         text = i18n.t(lang, "title_admin_ids") + "\n\n" + i18n.t(lang, "msg_admin_ids", ids=ids_text)
+        await app.bot.send_message(chat_id, text, reply_markup=_reply_markup(state, lang, chat_id))
+        return
+    if state == "group_ids":
+        group_ids = sorted(app.bot_data["cfg"].allowed_group_ids)
+        ids_text = ", ".join(str(group_id) for group_id in group_ids) or "—"
+        text = i18n.t(lang, "title_group_ids") + "\n\n" + i18n.t(lang, "msg_group_ids", ids=ids_text)
         await app.bot.send_message(chat_id, text, reply_markup=_reply_markup(state, lang, chat_id))
         return
     await app.bot.send_message(chat_id, _title(state, lang), reply_markup=_reply_markup(state, lang, chat_id))
@@ -1010,6 +1021,47 @@ async def _apply_admin_id_change(app, chat_id: int, text: str) -> None:
         return
     await app.bot.send_message(chat_id, i18n.t(lang, message_key, chat_id=admin_id))
     await _goto(app, chat_id, "admin_ids")
+
+
+async def _start_group_id_change(app, chat_id: int, action: str) -> None:
+    lang = get_lang(app, chat_id)
+    app.bot_data.setdefault("awaiting_group_id", {})[chat_id] = action
+    key = "msg_enter_group_id_add" if action == "add" else "msg_enter_group_id_remove"
+    await app.bot.send_message(chat_id, i18n.t(lang, key))
+
+
+async def _apply_group_id_change(app, chat_id: int, text: str) -> None:
+    lang = get_lang(app, chat_id)
+    action = app.bot_data.setdefault("awaiting_group_id", {}).pop(chat_id)
+    try:
+        group_id = int(text.strip())
+    except ValueError:
+        await app.bot.send_message(chat_id, i18n.t(lang, "msg_group_id_invalid"))
+        app.bot_data["awaiting_group_id"][chat_id] = action
+        return
+    if group_id >= 0:
+        await app.bot.send_message(chat_id, i18n.t(lang, "msg_group_id_invalid"))
+        app.bot_data["awaiting_group_id"][chat_id] = action
+        return
+
+    cfg: Config = app.bot_data["cfg"]
+    if action == "add":
+        cfg.allowed_group_ids.add(group_id)
+        message_key = "msg_group_id_added"
+    else:
+        cfg.allowed_group_ids.discard(group_id)
+        message_key = "msg_group_id_removed"
+    try:
+        await asyncio.to_thread(
+            update_allowed_group_ids,
+            app.bot_data.get("config_path", "config.yaml"),
+            cfg.allowed_group_ids,
+        )
+    except Exception as exc:
+        await app.bot.send_message(chat_id, f"⚠️ {exc}")
+        return
+    await app.bot.send_message(chat_id, i18n.t(lang, message_key, chat_id=group_id))
+    await _goto(app, chat_id, "group_ids")
 
 
 async def _goto_teacher_list(app, chat_id) -> None:
@@ -1868,6 +1920,10 @@ async def on_text(update, context):
         await _apply_admin_id_change(app, chat_id, text)
         return
 
+    if _is_master_admin(chat_id) and chat_id in app.bot_data.setdefault("awaiting_group_id", {}):
+        await _apply_group_id_change(app, chat_id, text)
+        return
+
     if await _handle_pflow_text(app, chat_id, text):
         return
 
@@ -1914,6 +1970,14 @@ async def on_text(update, context):
             return
         if id_ == "admin_remove":
             await _start_admin_id_change(app, chat_id, "remove")
+            return
+
+    if cur == "group_ids" and _is_master_admin(chat_id):
+        if id_ == "group_add":
+            await _start_group_id_change(app, chat_id, "add")
+            return
+        if id_ == "group_remove":
+            await _start_group_id_change(app, chat_id, "remove")
             return
 
     if norm_room(text) in cfg.cameras:

@@ -52,6 +52,8 @@ class Config:
         else:
             # Если admin_chat_ids пуст или не указан — пустой набор (доступ для всех)
             self.admin_chat_ids = set()
+        groups = tg.get("allowed_group_ids")
+        self.allowed_group_ids: set[int] = {int(x) for x in groups} if groups else set()
 
         self.tz = pytz.timezone(raw.get("timezone") or "Asia/Tashkent")
         self.working_days = set(raw.get("working_days") or [0, 1, 2, 3, 4, 5])
@@ -168,6 +170,23 @@ def update_admin_chat_ids(path: str | pathlib.Path, chat_ids: set[int]) -> None:
 
     telegram = data.setdefault("telegram", {})
     telegram["admin_chat_ids"] = sorted(chat_ids)
+
+    with open(path, "w", encoding="utf-8") as f:
+        yaml_rt.dump(data, f)
+
+
+def update_allowed_group_ids(path: str | pathlib.Path, chat_ids: set[int]) -> None:
+    """Обновляет список разрешённых Telegram-групп, сохраняя YAML-комментарии."""
+    from ruamel.yaml import YAML
+
+    yaml_rt = YAML()
+    yaml_rt.preserve_quotes = True
+    path = pathlib.Path(path)
+    with open(path, encoding="utf-8") as f:
+        data = yaml_rt.load(f)
+
+    telegram = data.setdefault("telegram", {})
+    telegram["allowed_group_ids"] = sorted(chat_ids)
 
     with open(path, "w", encoding="utf-8") as f:
         yaml_rt.dump(data, f)
