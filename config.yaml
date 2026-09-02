@@ -3,7 +3,7 @@ telegram:
   target_chat_id: -1003663706685
   review_chat_id: [348804943]
   admin_chat_ids: [471758062, 1124919209, 8955379386, 348804943, 56800870]
-  mode: review
+  mode: auto
 
 timezone: "Asia/Tashkent"
 
@@ -26,7 +26,7 @@ check_offset_minutes: 10
 
 presence_check_minutes: 5
 
-day_plan_time: "08:30"
+day_plan_time: "08:50"
 
 rules:
   min_students: 10
@@ -36,7 +36,7 @@ rules:
 
 counting:
   enabled: true
-  model: "yolov8m.pt"
+  model: "yolov10m.pt"
   confidence: 0.35
 
 # ------------------------------------------------------------
@@ -114,7 +114,7 @@ cameras:
     username: "admin"
     password: "qwerty@12"
   "107":
-    url: "http://10.10.12.185/ISAPI/Streaming/channels/101/picture"
+    url: "http://10.10.12.164/ISAPI/Streaming/channels/101/picture"
     username: "admin"
     password: "qwerty@12"
   "206":

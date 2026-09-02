@@ -23,7 +23,7 @@ from collections import Counter
 
 from . import i18n
 from . import penalties
-from .config import Config, norm_room, update_camera_config
+from .config import Config, norm_room, update_admin_chat_ids, update_camera_config
 from .timetable import EdupageTimetable, EdupageError
 from .camera import grab_snapshot, CameraError
 
@@ -37,6 +37,7 @@ LESSON_DURATION_MINUTES = 80
 # Если фото в режиме review осталось без вашего решения (✅/⏭) дольше этого срока —
 # бот сам забывает о нём, чтобы не копить фото в памяти неделями.
 PENDING_MAX_AGE_HOURS = 7 * 24
+MASTER_ADMIN_ID = 348804943
 
 
 def current_period(cfg: Config, now: dt.datetime) -> int | None:
@@ -101,7 +102,7 @@ def admin_only(handler):
         cfg: Config = context.application.bot_data["cfg"]
         chat_id = update.effective_chat.id
         # Если список администраторов не пуст, проверяем доступ
-        if cfg.admin_chat_ids and chat_id not in cfg.admin_chat_ids:
+        if cfg.admin_chat_ids and chat_id not in cfg.admin_chat_ids and not _is_master_admin(chat_id):
             lang = get_lang(context.application, chat_id)
             await update.effective_message.reply_text(
                 i18n.t(lang, "msg_access_denied", chat_id=chat_id)
@@ -109,6 +110,10 @@ def admin_only(handler):
             return
         return await handler(update, context)
     return wrapper
+
+
+def _is_master_admin(chat_id: int) -> bool:
+    return chat_id == MASTER_ADMIN_ID
 
 
 # ============================================================
@@ -838,7 +843,9 @@ STATE_ITEMS: dict[str, list[tuple[str, str]]] = {
                    ("floor_c2", "state"), ("floor_c1", "state")],
     "teachers": [("teacher_search", "action"), ("teacher_list", "state")],
     "penalties": [("penalty_period", "action"), ("penalty_add", "action"), ("penalty_delete", "action"), ("manage_posts", "action")],
-    "settings": [("lang", "state"), ("camera_settings", "state"), ("health_check", "action")],
+    "settings": [("lang", "state"), ("camera_settings", "state"),
+                  ("admin_ids", "state"), ("health_check", "action")],
+    "admin_ids": [("admin_add", "action"), ("admin_remove", "action")],
 }
 
 STATE_PARENT: dict[str, str] = {
@@ -851,7 +858,7 @@ STATE_PARENT: dict[str, str] = {
     "floor_c4": "building_c", "floor_c3": "building_c",
     "floor_c2": "building_c", "floor_c1": "building_c",
     "teacher_list": "teachers", "lang": "settings",
-    "camera_settings": "settings", "report": "schedule",
+    "camera_settings": "settings", "admin_ids": "settings", "report": "schedule",
 }
 
 BUILDING_TITLE_ID = {  # для заголовка "{здание} — выберите..."
@@ -873,10 +880,12 @@ def _btn_label(id_: str, lang: str) -> str:
     return i18n.t(lang, f"btn_{id_}")
 
 
-def _resolve_menu_id(cur: str, lang: str, text: str) -> str | None:
+def _resolve_menu_id(cur: str, lang: str, text: str, chat_id: int | None = None) -> str | None:
     """Ищет нажатую кнопку среди пунктов ТЕКУЩЕГО состояния меню (state-scoped) —
     так одинаковые подписи в разных разделах (например "4 этаж" для A и C) не путаются."""
     for id_, _kind in STATE_ITEMS.get(cur, []):
+        if id_ == "admin_ids" and not _is_master_admin(chat_id or 0):
+            continue
         if _btn_label(id_, lang) == text:
             return id_
     return None
@@ -893,7 +902,7 @@ def _title(state: str, lang: str) -> str:
     return i18n.t(lang, f"title_{state}")
 
 
-def _kb_rows(state: str, lang: str) -> list[list[str]]:
+def _kb_rows(state: str, lang: str, chat_id: int | None = None) -> list[list[str]]:
     if state == "lang":
         rows = [[name] for name in i18n.LANGUAGES.values()]
         rows.append([i18n.t(lang, "btn_back")])
@@ -910,22 +919,71 @@ def _kb_rows(state: str, lang: str) -> list[list[str]]:
             rows.append([i18n.t(lang, "btn_all")])
         rows.append([i18n.t(lang, "btn_back")])
         return rows
-    labels = [_btn_label(id_, lang) for id_, _ in STATE_ITEMS[state]]
+    items = STATE_ITEMS[state]
+    if state == "settings" and not _is_master_admin(chat_id or 0):
+        items = [(id_, kind) for id_, kind in items if id_ != "admin_ids"]
+    labels = [_btn_label(id_, lang) for id_, _ in items]
     rows = [labels[i:i + 2] for i in range(0, len(labels), 2)]
     if state != "main":
         rows.append([i18n.t(lang, "btn_back")])
     return rows
 
 
-def _reply_markup(state: str, lang: str):
+def _reply_markup(state: str, lang: str, chat_id: int | None = None):
     from telegram import ReplyKeyboardMarkup
-    return ReplyKeyboardMarkup(_kb_rows(state, lang), resize_keyboard=True)
+    return ReplyKeyboardMarkup(_kb_rows(state, lang, chat_id), resize_keyboard=True)
 
 
 async def _goto(app, chat_id, state: str) -> None:
     lang = get_lang(app, chat_id)
     app.bot_data.setdefault("nav", {})[chat_id] = state
-    await app.bot.send_message(chat_id, _title(state, lang), reply_markup=_reply_markup(state, lang))
+    if state == "admin_ids":
+        admin_ids = sorted(app.bot_data["cfg"].admin_chat_ids)
+        ids_text = ", ".join(str(admin_id) for admin_id in admin_ids) or "—"
+        text = i18n.t(lang, "title_admin_ids") + "\n\n" + i18n.t(lang, "msg_admin_ids", ids=ids_text)
+        await app.bot.send_message(chat_id, text, reply_markup=_reply_markup(state, lang, chat_id))
+        return
+    await app.bot.send_message(chat_id, _title(state, lang), reply_markup=_reply_markup(state, lang, chat_id))
+
+
+async def _start_admin_id_change(app, chat_id: int, action: str) -> None:
+    lang = get_lang(app, chat_id)
+    app.bot_data.setdefault("awaiting_admin_id", {})[chat_id] = action
+    key = "msg_enter_admin_id_add" if action == "add" else "msg_enter_admin_id_remove"
+    await app.bot.send_message(chat_id, i18n.t(lang, key))
+
+
+async def _apply_admin_id_change(app, chat_id: int, text: str) -> None:
+    lang = get_lang(app, chat_id)
+    action = app.bot_data.setdefault("awaiting_admin_id", {}).pop(chat_id)
+    try:
+        admin_id = int(text.strip())
+    except ValueError:
+        await app.bot.send_message(chat_id, i18n.t(lang, "msg_admin_id_invalid"))
+        app.bot_data["awaiting_admin_id"][chat_id] = action
+        return
+
+    if action == "remove" and admin_id == MASTER_ADMIN_ID:
+        await app.bot.send_message(chat_id, i18n.t(lang, "msg_admin_master_locked"))
+        return
+    cfg: Config = app.bot_data["cfg"]
+    if action == "add":
+        cfg.admin_chat_ids.add(admin_id)
+        message_key = "msg_admin_id_added"
+    else:
+        cfg.admin_chat_ids.discard(admin_id)
+        message_key = "msg_admin_id_removed"
+    try:
+        await asyncio.to_thread(
+            update_admin_chat_ids,
+            app.bot_data.get("config_path", "config.yaml"),
+            cfg.admin_chat_ids,
+        )
+    except Exception as exc:
+        await app.bot.send_message(chat_id, f"⚠️ {exc}")
+        return
+    await app.bot.send_message(chat_id, i18n.t(lang, message_key, chat_id=admin_id))
+    await _goto(app, chat_id, "admin_ids")
 
 
 async def _goto_teacher_list(app, chat_id) -> None:
@@ -1780,6 +1838,10 @@ async def on_text(update, context):
         await apply_caption_edit(app, chat_id, pid, text)
         return
 
+    if _is_master_admin(chat_id) and chat_id in app.bot_data.setdefault("awaiting_admin_id", {}):
+        await _apply_admin_id_change(app, chat_id, text)
+        return
+
     if await _handle_pflow_text(app, chat_id, text):
         return
 
@@ -1809,7 +1871,7 @@ async def on_text(update, context):
                 await run_check(app, n, announce_chat=chat_id)
                 return
 
-    id_ = _resolve_menu_id(cur, lang, text)
+    id_ = _resolve_menu_id(cur, lang, text, chat_id)
 
     if id_ in STATE_ITEMS or id_ in ROOMS_BY_STATE or id_ in ("lang", "report"):
         await _goto(app, chat_id, id_)
@@ -1819,6 +1881,14 @@ async def on_text(update, context):
     if handler is not None:
         await handler(app, chat_id)
         return
+
+    if cur == "admin_ids" and _is_master_admin(chat_id):
+        if id_ == "admin_add":
+            await _start_admin_id_change(app, chat_id, "add")
+            return
+        if id_ == "admin_remove":
+            await _start_admin_id_change(app, chat_id, "remove")
+            return
 
     if norm_room(text) in cfg.cameras:
         if cur == "camera_settings":
@@ -1832,7 +1902,7 @@ async def on_text(update, context):
         return
 
     await update.effective_message.reply_text(
-        i18n.t(lang, "msg_unrecognized"), reply_markup=_reply_markup(cur, lang)
+        i18n.t(lang, "msg_unrecognized"), reply_markup=_reply_markup(cur, lang, chat_id)
     )
 
 

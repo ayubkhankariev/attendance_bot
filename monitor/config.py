@@ -154,3 +154,20 @@ def update_camera_config(path: str | pathlib.Path, room: str, field: str, value:
 
     with open(path, "w", encoding="utf-8") as f:
         yaml_rt.dump(data, f)
+
+
+def update_admin_chat_ids(path: str | pathlib.Path, chat_ids: set[int]) -> None:
+    """Обновляет список разрешённых Telegram ID, сохраняя YAML-комментарии."""
+    from ruamel.yaml import YAML
+
+    yaml_rt = YAML()
+    yaml_rt.preserve_quotes = True
+    path = pathlib.Path(path)
+    with open(path, encoding="utf-8") as f:
+        data = yaml_rt.load(f)
+
+    telegram = data.setdefault("telegram", {})
+    telegram["admin_chat_ids"] = sorted(chat_ids)
+
+    with open(path, "w", encoding="utf-8") as f:
+        yaml_rt.dump(data, f)
