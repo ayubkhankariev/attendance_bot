@@ -24,6 +24,8 @@ periods:
 
 check_offset_minutes: 10
 
+# Отключена дополнительная быстрая проверка через 5 минут:
+# оставляем только основную проверку через check_offset_minutes.
 presence_check_minutes: 5
 
 day_plan_time: "08:50"
@@ -149,14 +151,27 @@ cameras:
     url: "http://10.10.12.189/ISAPI/Streaming/channels/101/picture"
     username: "admin"
     password: "qwerty@12"
-  "GREEN HALL":
-    url: "http://10.10.12.187/ISAPI/Streaming/channels/101/picture"
-    username: "admin"
-    password: "qwerty@12"
+  cameras:
   "BLUE HALL":
     url: "http://10.10.12.209/ISAPI/Streaming/channels/101/picture"
     username: "admin"
     password: "qwerty@12"
+    counting:
+      model: "yolov11m.pt"
+      confidence: 0.25
+      imgsz: 1440
+      iou: 0.45
+      augment: true
+  "GREEN HALL":
+    url: "http://10.10.12.187/ISAPI/Streaming/channels/101/picture"
+    username: "admin"
+    password: "qwerty@12"
+    counting:
+      model: "yolov11m.pt"
+      confidence: 0.25
+      imgsz: 1440
+      iou: 0.45
+      augment: true
   "101 CHEM LAB":
     url: "http://10.10.12.211/ISAPI/Streaming/channels/101/picture"
     username: "admin"
