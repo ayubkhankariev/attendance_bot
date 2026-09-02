@@ -26,7 +26,7 @@ check_offset_minutes: 10
 
 # Отключена дополнительная быстрая проверка через 5 минут:
 # оставляем только основную проверку через check_offset_minutes.
-presence_check_minutes: null
+presence_check_minutes: 5
 
 day_plan_time: "08:30"
 
