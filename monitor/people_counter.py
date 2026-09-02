@@ -20,8 +20,13 @@ def _load_model(name: str):
 
 
 def count_people(image_bytes: bytes, model_name: str = "yolov8s.pt",
-                 confidence: float = 0.35) -> tuple[int, bytes]:
-    """Вернёт (число людей, JPEG с рамками)."""
+                 confidence: float = 0.35, *, imgsz: int = 1280,
+                 iou: float = 0.5, augment: bool = True) -> tuple[int, bytes]:
+    """Вернёт (число людей, JPEG с рамками).
+
+    Параметры imgsz/iou/augment позволяют тонко настраивать качество детекции
+    для отдельных аудиторий или слабых камер без изменения глобальных настроек.
+    """
     import cv2
     import numpy as np
 
@@ -33,9 +38,9 @@ def count_people(image_bytes: bytes, model_name: str = "yolov8s.pt",
     model = _load_model(model_name)
     result = model.predict(
         img, classes=[0], conf=confidence, verbose=False,
-        imgsz=1280,      # крупное разрешение — иначе теряются дальние/мелкие фигуры на фото аудитории
-        iou=0.5,         # строже NMS — меньше двойных рамок на одном и том же человеке
-        augment=True,    # test-time augmentation — точнее ловит частично перекрытых людей
+        imgsz=imgsz,
+        iou=iou,
+        augment=augment,
     )[0]
     count = 0 if result.boxes is None else len(result.boxes)
 

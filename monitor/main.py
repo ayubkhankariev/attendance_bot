@@ -225,6 +225,18 @@ def detected_to_students(cfg: Config, detected: int) -> int:
     return detected
 
 
+def camera_counting_settings(cfg: Config, cam: dict | None) -> dict:
+    """Параметры детекции для конкретной камеры или глобального конфига."""
+    room_cfg = (cam or {}).get("counting") or {}
+    return {
+        "model_name": str(room_cfg.get("model") or cfg.model_name),
+        "confidence": float(room_cfg.get("confidence", cfg.confidence)),
+        "imgsz": int(room_cfg.get("imgsz", 1280)),
+        "iou": float(room_cfg.get("iou", 0.5)),
+        "augment": bool(room_cfg.get("augment", True)),
+    }
+
+
 # ============================================================
 #  Основная логика проверки одной пары
 # ============================================================
@@ -289,8 +301,15 @@ async def process_lesson(app, lesson: dict, cam: dict, period: int, requester_ch
     annotated = photo
     if cfg.counting_enabled:
         from . import people_counter
+        counting = camera_counting_settings(cfg, cam)
         detected, annotated = await asyncio.to_thread(
-            people_counter.count_people, photo, cfg.model_name, cfg.confidence
+            people_counter.count_people,
+            photo,
+            counting["model_name"],
+            counting["confidence"],
+            imgsz=counting["imgsz"],
+            iou=counting["iou"],
+            augment=counting["augment"],
         )
 
     students = detected_to_students(cfg, detected) if detected is not None else 0
@@ -535,8 +554,15 @@ async def on_room_pick_select(update, context):
     annotated = photo
     if cfg.counting_enabled:
         from . import people_counter
+        counting = camera_counting_settings(cfg, cam)
         detected, annotated = await asyncio.to_thread(
-            people_counter.count_people, photo, cfg.model_name, cfg.confidence
+            people_counter.count_people,
+            photo,
+            counting["model_name"],
+            counting["confidence"],
+            imgsz=counting["imgsz"],
+            iou=counting["iou"],
+            augment=counting["augment"],
         )
 
     item["lesson"] = dict(item["lesson"], room=norm_room(room))
@@ -1914,8 +1940,15 @@ async def run_presence_check(app, period: int) -> None:
             continue
         try:
             photo = await asyncio.to_thread(grab_snapshot, cam)
+            counting = camera_counting_settings(cfg, cam)
             detected, _ = await asyncio.to_thread(
-                people_counter.count_people, photo, cfg.model_name, cfg.confidence
+                people_counter.count_people,
+                photo,
+                counting["model_name"],
+                counting["confidence"],
+                imgsz=counting["imgsz"],
+                iou=counting["iou"],
+                augment=counting["augment"],
             )
         except Exception:
             log.exception("Проверка присутствия: ошибка камеры %s", lesson["room"])
@@ -2116,7 +2149,15 @@ def cli_test_camera(cfg: Config, room: str) -> None:
     print(f"Снимок сохранён: {fname} ({len(photo)} байт)")
     if cfg.counting_enabled:
         from . import people_counter
-        count, annotated = people_counter.count_people(photo, cfg.model_name, cfg.confidence)
+        counting = camera_counting_settings(cfg, cam)
+        count, annotated = people_counter.count_people(
+            photo,
+            counting["model_name"],
+            counting["confidence"],
+            imgsz=counting["imgsz"],
+            iou=counting["iou"],
+            augment=counting["augment"],
+        )
         aname = fname.replace(".jpg", "_detected.jpg")
         with open(aname, "wb") as f:
             f.write(annotated)
