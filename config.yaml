@@ -3,7 +3,7 @@ telegram:
   target_chat_id: -1003663706685
   review_chat_id: [348804943]
   admin_chat_ids: [471758062, 1124919209, 8955379386, 348804943, 56800870]
-  mode: auto
+  mode: review
 
 timezone: "Asia/Tashkent"
 
@@ -116,7 +116,7 @@ cameras:
     username: "admin"
     password: "qwerty@12"
   "107":
-    url: "http://10.10.12.164/ISAPI/Streaming/channels/101/picture"
+    url: "http://10.10.12.185/ISAPI/Streaming/channels/101/picture"
     username: "admin"
     password: "qwerty@12"
   "206":
@@ -151,27 +151,14 @@ cameras:
     url: "http://10.10.12.189/ISAPI/Streaming/channels/101/picture"
     username: "admin"
     password: "qwerty@12"
-  cameras:
   "BLUE HALL":
     url: "http://10.10.12.209/ISAPI/Streaming/channels/101/picture"
     username: "admin"
     password: "qwerty@12"
-    counting:
-      model: "yolov11m.pt"
-      confidence: 0.25
-      imgsz: 1440
-      iou: 0.45
-      augment: true
   "GREEN HALL":
     url: "http://10.10.12.187/ISAPI/Streaming/channels/101/picture"
     username: "admin"
     password: "qwerty@12"
-    counting:
-      model: "yolov11m.pt"
-      confidence: 0.25
-      imgsz: 1440
-      iou: 0.45
-      augment: true
   "101 CHEM LAB":
     url: "http://10.10.12.211/ISAPI/Streaming/channels/101/picture"
     username: "admin"
