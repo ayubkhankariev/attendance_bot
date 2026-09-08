@@ -325,7 +325,12 @@ async def process_lesson(app, lesson: dict, cam: dict, period: int, requester_ch
 
     if cfg.mode == "auto" and cfg.counting_enabled:
         try:
-            msg = await app.bot.send_photo(cfg.target_chat_id, photo=photo, caption=caption)
+            msg = await app.bot.send_photo(
+                cfg.target_chat_id,
+                photo=photo,
+                caption=caption,
+                message_thread_id=cfg.target_thread_id,
+            )
         except Exception:
             log.exception("Не удалось отправить фото в группу руководителей: %s / %s",
                           lesson["room"], lesson["subject"])

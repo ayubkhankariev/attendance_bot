@@ -1,6 +1,7 @@
 telegram:
   bot_token: "8996503912:AAFIeqwV3NEfNmBBeBhFwXl5NIUeVLqkdfc"
-  target_chat_id: -1003663706685
+  target_chat_id: -1001180347047
+  target_thread_id: 2780
   review_chat_id: [348804943]
   admin_chat_ids: [471758062, 1124919209, 8955379386, 348804943, 56800870]
   mode: review

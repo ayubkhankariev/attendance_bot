@@ -38,6 +38,7 @@ class Config:
         tg = raw.get("telegram") or {}
         self.bot_token: str = str(tg.get("bot_token") or "").strip()
         self.target_chat_id = tg.get("target_chat_id")
+        self.target_thread_id = tg.get("target_thread_id")
         self.review_chat_id = tg.get("review_chat_id")
         self.mode: str = str(tg.get("mode") or "review").strip().lower()
         if self.mode not in ("review", "auto"):
