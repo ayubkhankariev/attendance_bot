@@ -23,6 +23,12 @@ VIOLATIONS_FILE = pathlib.Path("violations.json")
 
 TYPES = ("ZAMENA", "TALABALARSONI", "DARSBARBOD")
 
+# Псевдо-тип для постов без нарушения (полная явка) — заводится, чтобы ЛЮБОЙ
+# отправленный в группу пост можно было найти и удалить через «Управление
+# постами». В список TYPES не входит: не должен попадать в отчёты по
+# нарушениям и в ручное меню «Добавить нарушение».
+SENT_TYPE = "OK"
+
 
 def load() -> list[dict]:
     if VIOLATIONS_FILE.exists():
@@ -61,13 +67,15 @@ def find_duplicate(records: list[dict], date: dt.date, period: int,
 
 def add(app, *, date: dt.date, period: int, teacher: str, subject: str,
         groups: list[str], vtype: str, students: int | None = None,
-        total: int | None = None, link: str | None = None, 
-        message_id: int | None = None, message_chat_id: int | None = None) -> dict:
+        total: int | None = None, link: str | None = None,
+        message_id: int | None = None, message_chat_id: int | None = None,
+        room: str | None = None) -> dict:
     records = all_records(app)
     rec = {
         "id": uuid.uuid4().hex[:10],
         "date": date.isoformat(),
         "period": period,
+        "room": room,
         "teacher": teacher,
         "subject": subject,
         "groups": groups or [],
@@ -159,9 +167,14 @@ def delete_by_message_id(app, message_id: int) -> bool:
 
 def filter_records(records: list[dict], date_from: dt.date | None = None,
                     date_to: dt.date | None = None, teacher_query: str | None = None,
-                    vtype: str | None = None) -> list[dict]:
+                    vtype: str | None = None, include_all: bool = False) -> list[dict]:
+    """include_all=False (по умолчанию) скрывает записи SENT_TYPE (посты без
+    нарушения) — так они не попадают в отчёты/экспорт по «Штрафам».
+    «Управление постами» вызывает с include_all=True, чтобы видеть все посты."""
     out = []
     for r in records:
+        if not include_all and r["type"] == SENT_TYPE and vtype != SENT_TYPE:
+            continue
         d = dt.date.fromisoformat(r["date"])
         if date_from and d < date_from:
             continue

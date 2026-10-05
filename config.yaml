@@ -3,7 +3,7 @@ telegram:
   target_chat_id: -1001180347047
   target_thread_id: 2780
   review_chat_id: [348804943]
-  admin_chat_ids: [471758062, 1124919209, 8955379386, 348804943, 56800870]
+  admin_chat_ids: [471758062, 1124919209, 8955379386, 348804943, 56800870, 875428138]
   mode: review
 
 timezone: "Asia/Tashkent"
@@ -36,10 +36,21 @@ rules:
   low_hashtag: "#TALABALARSONI"
   empty_hashtag: "#DARSBARBOD"
   assume_teacher_in_count: true
+  # Магистратура (MSc) — гибридный формат, малое число студентов в аудитории
+  # там норма, а не нарушение: вместо low_hashtag ставится hybrid_hashtag.
+  hybrid_hashtag: "#HYBRID"
+  hybrid_groups:
+    - MSc_DS-26
+    - MSc_TE-26
+    - MSc_TE-25
+    - MSc_MCRPHCM-26
+    - MSc_MCRPHCM-25
+    - MSc_MBA-26
+    - MSc_MBA-25
 
 counting:
   enabled: true
-  model: "yolov10m.pt"
+  model: "yolo11m.pt"
   confidence: 0.35
 
 # ------------------------------------------------------------
@@ -100,7 +111,7 @@ cameras:
     url: "http://10.10.12.176/ISAPI/Streaming/channels/101/picture"
     username: "admin"
     password: "qwerty@12"
-  "305AB":
+  "305AB Phy LAB":
     url: "http://10.10.12.175/ISAPI/Streaming/channels/101/picture"
     username: "admin"
     password: "qwerty@12"
@@ -156,6 +167,15 @@ cameras:
     url: "http://10.10.12.209/ISAPI/Streaming/channels/101/picture"
     username: "admin"
     password: "qwerty@12"
+    counting:
+      model: "blue_hall_yolo11s.pt"
+      confidence: 0.3
+      # Нижний правый угол кадра: надпись "Green hall" (старая метка камеры) +
+      # рамка с фото/растением на стене — статичный ложный "человек" на каждом
+      # снимке. Зона в долях ширины/высоты кадра (0..1), не сами пиксели —
+      # подходит для любого разрешения этой камеры.
+      ignore_regions:
+        - [0.70, 0.90, 1.0, 1.0]
   "GREEN HALL":
     url: "http://10.10.12.187/ISAPI/Streaming/channels/101/picture"
     username: "admin"
@@ -189,3 +209,4 @@ group_sizes:
   IT1-23: 28
   IT2-23: 28
   SE-23: 27
+  AD-23: 17

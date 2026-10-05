@@ -78,6 +78,12 @@ class Config:
         self.low_hashtag = str(rules.get("low_hashtag", "#TALABALARSONI"))
         self.empty_hashtag = str(rules.get("empty_hashtag", "#DARSBARBOD"))
         self.assume_teacher = bool(rules.get("assume_teacher_in_count", True))
+        # Группы (обычно магистратура — MSc), где малое число студентов — норма
+        # (гибридный формат), а не нарушение: вместо low_hashtag ставится hybrid_hashtag.
+        self.hybrid_hashtag = str(rules.get("hybrid_hashtag", "#HYBRID"))
+        self.hybrid_groups: set[str] = {
+            str(g).strip().upper() for g in (rules.get("hybrid_groups") or [])
+        }
 
         counting = raw.get("counting") or {}
         self.counting_enabled = bool(counting.get("enabled", True))

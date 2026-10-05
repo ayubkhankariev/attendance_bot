@@ -97,18 +97,22 @@ def set_lang(app, chat_id, lang: str) -> None:
 def admin_only(handler):
     """Ограничивает команду/кнопку списком telegram.admin_chat_ids.
     /id — единственное исключение (нужна, чтобы вообще узнать свой chat_id).
-    Если admin_chat_ids пуст — доступ для всех."""
+    Если admin_chat_ids пуст — доступ для всех.
+    В группах (не личке) при отказе в доступе бот молчит — иначе он спамил бы
+    сообщением об отказе в группу руководителей на каждое чужое сообщение там."""
     @functools.wraps(handler)
     async def wrapper(update, context):
         cfg: Config = context.application.bot_data["cfg"]
-        chat_id = update.effective_chat.id
+        chat = update.effective_chat
+        chat_id = chat.id
         # Если список администраторов не пуст, проверяем доступ
         allowed = cfg.admin_chat_ids | cfg.allowed_group_ids
         if allowed and chat_id not in allowed and not _is_master_admin(chat_id):
-            lang = get_lang(context.application, chat_id)
-            await update.effective_message.reply_text(
-                i18n.t(lang, "msg_access_denied", chat_id=chat_id)
-            )
+            if chat.type == "private":
+                lang = get_lang(context.application, chat_id)
+                await update.effective_message.reply_text(
+                    i18n.t(lang, "msg_access_denied", chat_id=chat_id)
+                )
             return
         return await handler(update, context)
     return wrapper
@@ -133,14 +137,23 @@ def base_lines(lesson: dict) -> list[str]:
     return [x for x in lines if x]
 
 
+def _is_hybrid_lesson(cfg: Config, lesson: dict) -> bool:
+    """Группы вроде MSc (магистратура) занимаются в гибридном формате —
+    малое число студентов в аудитории там норма, а не нарушение."""
+    return any(str(c).strip().upper() in cfg.hybrid_groups for c in lesson["classes"])
+
+
 def final_caption(cfg: Config, lesson: dict, students: int) -> str:
     """Итоговая подпись с хештегами по правилам."""
     lines = base_lines(lesson)
     if students <= 0:
         lines.append(cfg.empty_hashtag)
     elif students < cfg.min_students:
-        total = cfg.group_total(lesson["classes"])
-        lines.append(f"{cfg.low_hashtag} {students}/{total if total else '?'}")
+        if _is_hybrid_lesson(cfg, lesson):
+            lines.append(cfg.hybrid_hashtag)
+        else:
+            total = cfg.group_total(lesson["classes"])
+            lines.append(f"{cfg.low_hashtag} {students}/{total if total else '?'}")
     return "\n".join(lines)
 
 
@@ -157,29 +170,34 @@ def _detect_violation_type(cfg: Config, caption: str) -> str | None:
 
 async def _maybe_log_violation(app, lesson: dict, period: int, students: int,
                                 date: dt.date, caption: str, msg) -> None:
+    """Записывает КАЖДЫЙ пост, отправленный в группу руководителей — не только
+    нарушения (TALABALARSONI/DARSBARBOD получают свой тип, обычная явка —
+    penalties.SENT_TYPE). Это позволяет найти и удалить/отредактировать
+    ЛЮБОЙ отправленный пост через «Штрафы» → «Управление постами», в том
+    числе если он был отправлен по ошибке (не только реальное нарушение).
+    В отчёты/экспорт по нарушениям такие записи не попадают — see
+    penalties.filter_records(include_all=...)."""
     cfg: Config = app.bot_data["cfg"]
-    vtype = _detect_violation_type(cfg, caption)
-    if vtype is None:
-        return
+    vtype = _detect_violation_type(cfg, caption) or penalties.SENT_TYPE
     total = None
     if vtype == "TALABALARSONI":
         total = cfg.group_total(lesson["classes"])
-    else:
+    elif vtype == "DARSBARBOD":
         students = None
     try:
         link = msg.link
     except Exception:
         link = None
-    
+
     # Проверка на дублирование в течение 5 минут
     records = penalties.all_records(app)
     duplicate = penalties.find_duplicate_within_time(
-        records, date, period, 
+        records, date, period,
         ", ".join(t.upper() for t in lesson["teachers"]) or "-",
         lesson["classes"],
         minutes_threshold=5
     )
-    
+
     if duplicate:
         # Есть дубликат - обновляем старый пост (заменяем на новый)
         # Удаляем старый пост из группы и добавляем новый
@@ -191,26 +209,30 @@ async def _maybe_log_violation(app, lesson: dict, period: int, students: int,
                 )
             except Exception as e:
                 log.warning("Не удалось удалить старый пост: %s", e)
-        
+
         # Обновляем данные штрафа
         penalties.update(
             app,
             duplicate["id"],
+            type=vtype,
+            room=lesson["room"],
             students=students,
+            total=total,
             message_id=msg.message_id,
             message_chat_id=cfg.target_chat_id,
             link=link,
             created=dt.datetime.now().isoformat(timespec="seconds"),
         )
-        log.info("Дубликат урока найден - пост обновлён: %s пара %s", 
+        log.info("Дубликат урока найден - пост обновлён: %s пара %s",
                 lesson["room"], period)
         return
-    
-    # Нет дубликата - добавляем новый штраф
+
+    # Нет дубликата - добавляем новую запись
     penalties.add(
         app,
         date=date,
         period=period,
+        room=lesson["room"],
         teacher=", ".join(t.upper() for t in lesson["teachers"]) or "-",
         subject=lesson["subject"],
         groups=lesson["classes"],
@@ -241,6 +263,7 @@ def camera_counting_settings(cfg: Config, cam: dict | None) -> dict:
         "imgsz": int(room_cfg.get("imgsz", 1280)),
         "iou": float(room_cfg.get("iou", 0.5)),
         "augment": bool(room_cfg.get("augment", True)),
+        "ignore_regions": [tuple(r) for r in (room_cfg.get("ignore_regions") or [])],
     }
 
 
@@ -317,6 +340,7 @@ async def process_lesson(app, lesson: dict, cam: dict, period: int, requester_ch
             imgsz=counting["imgsz"],
             iou=counting["iou"],
             augment=counting["augment"],
+            ignore_regions=counting["ignore_regions"],
         )
 
     students = detected_to_students(cfg, detected) if detected is not None else 0
@@ -324,6 +348,8 @@ async def process_lesson(app, lesson: dict, cam: dict, period: int, requester_ch
     today = dt.datetime.now(cfg.tz).date()
 
     if cfg.mode == "auto" and cfg.counting_enabled:
+        log.info("DEBUG target_chat_id=%r target_thread_id=%r (%s)",
+            cfg.target_chat_id, cfg.target_thread_id, type(cfg.target_thread_id))
         try:
             msg = await app.bot.send_photo(
                 cfg.target_chat_id,
@@ -359,10 +385,6 @@ async def process_lesson(app, lesson: dict, cam: dict, period: int, requester_ch
     app.bot_data.setdefault("pending", {})[pid] = item
 
     info = f"🕘 Пара {period} • {lesson['room']}"
-    if detected is not None:
-        info += f"\n🤖 Найдено людей на фото: {detected}"
-        if cfg.assume_teacher and detected > 0:
-            info += f" (студентов: {students}, 1 считаем преподавателем)"
     review_caption = final_caption(cfg, lesson, students) + "\n――――――\n" + info
 
     msg = await app.bot.send_photo(
@@ -440,8 +462,6 @@ async def on_callback(update, context):
         item["students"] = max(0, item["students"] + (1 if action == "inc" else -1))
         caption = final_caption(cfg, item["lesson"], item["students"])
         info = f"🕘 Пара {item['period']} • {item['lesson']['room']}"
-        if item["detected"] is not None:
-            info += f"\n🤖 Найдено людей на фото: {item['detected']}"
         await q.edit_message_caption(
             caption=caption + "\n――――――\n" + info,
             reply_markup=_keyboard(pid, item),
@@ -460,7 +480,12 @@ async def on_callback(update, context):
     if action == "send":
         caption = _current_caption(cfg, item)
         try:
-            msg = await context.bot.send_photo(cfg.target_chat_id, photo=item["photo"], caption=caption)
+            msg = await context.bot.send_photo(
+            cfg.target_chat_id,
+            photo=item["photo"],
+            caption=caption,
+            message_thread_id=cfg.target_thread_id,
+        )
         except Exception as e:
             log.exception("Не удалось отправить фото в группу руководителей (pid=%s)", pid)
             await q.answer(f"⚠️ Ошибка отправки: {e}", show_alert=True)
@@ -506,8 +531,6 @@ async def on_callback(update, context):
         item["custom_caption"] = None
         caption = _current_caption(cfg, item)
         info = f"🕘 Пара {item['period']} • {item['lesson']['room']}"
-        if item["detected"] is not None:
-            info += f"\n🤖 Найдено людей на фото: {item['detected']}"
         await q.edit_message_caption(
             caption=caption + "\n――――――\n" + info,
             reply_markup=_keyboard(pid, item),
@@ -575,6 +598,7 @@ async def on_room_pick_select(update, context):
             imgsz=counting["imgsz"],
             iou=counting["iou"],
             augment=counting["augment"],
+            ignore_regions=counting["ignore_regions"],
         )
 
     item["lesson"] = dict(item["lesson"], room=norm_room(room))
@@ -584,10 +608,6 @@ async def on_room_pick_select(update, context):
     item["custom_caption"] = None
 
     info = f"🕘 Пара {item['period']} • {item['lesson']['room']}"
-    if detected is not None:
-        info += f"\n🤖 Найдено людей на фото: {detected}"
-        if cfg.assume_teacher and detected > 0:
-            info += f" (студентов: {item['students']}, 1 считаем преподавателем)"
     caption = final_caption(cfg, item["lesson"], item["students"]) + "\n――――――\n" + info
 
     from telegram import InputMediaPhoto
@@ -842,7 +862,7 @@ async def send_teacher_photo(app, chat_id, query: str) -> None:
 ROOMS_BY_STATE: dict[str, list[str]] = {
     "floor_a4": ["LAB 401", "LAB 403", "LAB 404", "LAB 405", "LAB 406", "LAB 407",
                  "402AB", "403AB", "404AB"],
-    "floor_a3": ["301", "303", "304", "305", "306", "307", "302AB", "303AB", "305AB"],
+    "floor_a3": ["301", "303", "304", "305", "306", "307", "302AB", "303AB", "305AB Phy LAB"],
     "floor_a2": ["201", "203", "204", "205", "206", "207"],
     "floor_a1": ["105", "107", "BLUE HALL", "GREEN HALL", "101 CHEM LAB"],
     # Здание C и Mechatronics: IP камер ещё не переданы — кнопки уже работают,
@@ -1180,25 +1200,30 @@ async def _start_manage_posts(app, chat_id) -> None:
 async def _show_manage_posts_menu(app, chat_id, start: dt.date, end: dt.date) -> None:
     """Показывает список постов за период с кнопками редактирования/удаления."""
     lang = get_lang(app, chat_id)
-    records = penalties.filter_records(penalties.all_records(app), start, end)
-    
-    # Фильтруем только постые с message_id (отправленные в группу)
+    # include_all=True: показываем ВСЕ отправленные посты, включая обычную
+    # явку без нарушения (SENT_TYPE) — чтобы можно было удалить пост,
+    # отправленный по ошибке, даже если это не нарушение.
+    records = penalties.filter_records(penalties.all_records(app), start, end, include_all=True)
+
+    # Фильтруем только посты с message_id (отправленные в группу)
     posts = [r for r in records if r.get("message_id")]
-    
+
     if not posts:
         await app.bot.send_message(chat_id, i18n.t(lang, "msg_no_posts_found"))
         return
-    
+
     from telegram import InlineKeyboardButton, InlineKeyboardMarkup
-    
+
     for rec in posts:
         d = dt.date.fromisoformat(rec["date"])
         groups = " / ".join(rec.get("groups", [])) or "?"
         teacher = rec.get("teacher", "?")
         subject = rec.get("subject", "?")
-        text = (f"#{rec['type']} • {d.strftime('%d.%m.%y')} • пара {rec['period']} • {teacher}\n"
-                f"{subject} [{groups}]")
-        
+        room = rec.get("room")
+        label = f"#{rec['type']}" if rec["type"] != penalties.SENT_TYPE else "✅ без нарушения"
+        text = (f"{label} • {d.strftime('%d.%m.%y')} • пара {rec['period']} • {teacher}\n"
+                f"{subject} [{groups}]" + (f" • {room}" if room else ""))
+
         if rec.get("students") is not None:
             text += f"\n👥 {rec['students']} студентов"
         
@@ -1751,14 +1776,23 @@ async def _handle_pflow_text(app, chat_id, text: str) -> bool:
                     await app.bot.send_message(chat_id, "Кол-во студентов не может быть отрицательным.")
                     return True
                 
-                # Обновляем пост в группе
+                # Обновляем пост в группе — восстанавливаем реальный формат подписи
+                # (subject / TEACHER / room / groups [+ хештег]), а не служебный
+                # "#{type}", иначе в группу утечёт внутренний тег вроде "#OK".
                 if rec.get("message_id") and rec.get("message_chat_id"):
-                    old_caption = (
-                        f"#{rec['type']} • {dt.date.fromisoformat(rec['date']).strftime('%d.%m.%y')} • "
-                        f"пара {rec['period']} • {rec.get('teacher', '?')}\n"
-                        f"{rec.get('subject', '?')} [{' / '.join(rec.get('groups', []))}]\n"
-                        f"👥 {new_count} студентов"
-                    )
+                    cap_lines = [rec.get("subject", "?")]
+                    if rec.get("teacher") and rec["teacher"] != "-":
+                        cap_lines.append(rec["teacher"])
+                    if rec.get("room"):
+                        cap_lines.append(rec["room"])
+                    if rec.get("groups"):
+                        cap_lines.append(" / ".join(rec["groups"]))
+                    if rec["type"] == "DARSBARBOD":
+                        cap_lines.append(cfg.empty_hashtag)
+                    elif rec["type"] == "TALABALARSONI":
+                        total = rec.get("total") or "?"
+                        cap_lines.append(f"{cfg.low_hashtag} {new_count}/{total}")
+                    old_caption = "\n".join(cap_lines)
                     try:
                         await app.bot.edit_message_caption(
                             chat_id=rec["message_chat_id"],
@@ -2088,6 +2122,7 @@ async def run_presence_check(app, period: int) -> None:
                 imgsz=counting["imgsz"],
                 iou=counting["iou"],
                 augment=counting["augment"],
+                ignore_regions=counting["ignore_regions"],
             )
         except Exception:
             log.exception("Проверка присутствия: ошибка камеры %s", lesson["room"])
@@ -2296,6 +2331,7 @@ def cli_test_camera(cfg: Config, room: str) -> None:
             imgsz=counting["imgsz"],
             iou=counting["iou"],
             augment=counting["augment"],
+            ignore_regions=counting["ignore_regions"],
         )
         aname = fname.replace(".jpg", "_detected.jpg")
         with open(aname, "wb") as f:
